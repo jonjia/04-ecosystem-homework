@@ -21,7 +21,7 @@ struct ShortenRequest {
 
 #[derive(Debug, Serialize)]
 struct ShortenResponse {
-    id: String,
+    url: String,
 }
 
 #[derive(Clone)]
@@ -29,9 +29,10 @@ struct AppState {
     db: Arc<Mutex<HashMap<String, String>>>,
 }
 
+const BASE_URL: &str = "0.0.0.0:3000";
+
 #[tokio::main]
 async fn main() {
-    let listen_addr = "0.0.0.0:3000";
     let state = AppState {
         db: Arc::new(Mutex::new(HashMap::new())),
     };
@@ -39,9 +40,9 @@ async fn main() {
         .route("/", post(shorten))
         .route("/:id", get(redirect))
         .with_state(state);
-    let server = TcpListener::bind(listen_addr).await.unwrap();
+    let server = TcpListener::bind(BASE_URL).await.unwrap();
 
-    info!("Listening on {}", listen_addr);
+    info!("Listening on {}", BASE_URL);
 
     serve(server, app).await.unwrap();
 }
@@ -51,7 +52,7 @@ async fn shorten(
     Json(request): Json<ShortenRequest>,
 ) -> impl IntoResponse {
     let id = state.shorten(request.url);
-    Json(ShortenResponse { id })
+    Json(ShortenResponse { url: format!("http://{}/{}", BASE_URL, id) })
 }
 
 async fn redirect(
