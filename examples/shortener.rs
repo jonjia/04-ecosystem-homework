@@ -1,8 +1,4 @@
-use std::{
-    collections::HashMap,
-    sync::{Arc, Mutex},
-};
-
+use anyhow::Result;
 use axum::{
     extract::{Path, State},
     http::{header::LOCATION, HeaderMap, StatusCode},
@@ -11,6 +7,7 @@ use axum::{
     serve, Json, Router,
 };
 use serde::{Deserialize, Serialize};
+use sqlx::{FromRow, PgPool};
 use tokio::net::TcpListener;
 use tracing::info;
 
@@ -26,16 +23,25 @@ struct ShortenResponse {
 
 #[derive(Clone)]
 struct AppState {
-    db: Arc<Mutex<HashMap<String, String>>>,
+    db: PgPool,
+}
+
+#[derive(FromRow)]
+struct UrlRecord {
+    #[sqlx(default)]
+    id: String,
+    #[sqlx(default)]
+    url: String,
 }
 
 const BASE_URL: &str = "0.0.0.0:3000";
 
 #[tokio::main]
 async fn main() {
-    let state = AppState {
-        db: Arc::new(Mutex::new(HashMap::new())),
-    };
+    let pool = PgPool::connect("postgres://postgres:password@localhost/shortener")
+        .await
+        .unwrap();
+    let state = AppState { db: pool };
     let app = Router::new()
         .route("/", post(shorten))
         .route("/:id", get(redirect))
@@ -51,7 +57,7 @@ async fn shorten(
     State(state): State<AppState>,
     Json(request): Json<ShortenRequest>,
 ) -> impl IntoResponse {
-    let id = state.shorten(request.url);
+    let id = state.shorten(request.url).await.unwrap();
     Json(ShortenResponse {
         url: format!("http://{}/{}", BASE_URL, id),
     })
@@ -61,25 +67,33 @@ async fn redirect(
     State(state): State<AppState>,
     Path(id): Path<String>,
 ) -> Result<impl IntoResponse, StatusCode> {
-    let url = state.get_url(&id);
+    let url = state
+        .get_url(&id)
+        .await
+        .map_err(|_| StatusCode::NOT_FOUND)?;
     let mut headers = HeaderMap::new();
-    match url {
-        Some(url) => {
-            headers.insert(LOCATION, url.parse().unwrap());
-            Ok((headers, StatusCode::FOUND))
-        }
-        None => Err(StatusCode::NOT_FOUND),
-    }
+    headers.insert(LOCATION, url.parse().unwrap());
+    Ok((headers, StatusCode::FOUND))
 }
 
 impl AppState {
-    fn shorten(&self, url: String) -> String {
+    async fn shorten(&self, url: String) -> Result<String> {
         let id = nanoid::nanoid!(6);
-        self.db.lock().unwrap().insert(id.clone(), url);
-        id
+        let ret: UrlRecord = sqlx::query_as(
+            "INSERT INTO urls(id, url) VALUES ($1, $2) ON CONFLICT(url) DO UPDATE SET url=EXCLUDED.url RETURNING id;",
+        )
+        .bind(&id)
+        .bind(url)
+        .fetch_one(&self.db)
+        .await?;
+        Ok(ret.id)
     }
 
-    fn get_url(&self, id: &String) -> Option<String> {
-        self.db.lock().unwrap().get(id).cloned()
+    async fn get_url(&self, id: &str) -> Result<String> {
+        let record: UrlRecord = sqlx::query_as("SELECT url FROM urls WHERE id = $1;")
+            .bind(id)
+            .fetch_one(&self.db)
+            .await?;
+        Ok(record.url)
     }
 }
