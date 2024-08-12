@@ -52,7 +52,9 @@ async fn shorten(
     Json(request): Json<ShortenRequest>,
 ) -> impl IntoResponse {
     let id = state.shorten(request.url);
-    Json(ShortenResponse { url: format!("http://{}/{}", BASE_URL, id) })
+    Json(ShortenResponse {
+        url: format!("http://{}/{}", BASE_URL, id),
+    })
 }
 
 async fn redirect(
