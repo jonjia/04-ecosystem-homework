@@ -1,0 +1,10 @@
+### shorten url
+POST http://localhost:3000
+Content-Type: application/json
+
+{
+    "url": "https://www.baidu.com"
+}
+
+### redirect
+GET http://localhost:3000/IrIQ7D
