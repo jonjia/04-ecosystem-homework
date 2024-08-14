@@ -1,5 +1,5 @@
 ### shorten url
-POST http://localhost:3000
+POST http://localhost:9876
 Content-Type: application/json
 
 {
@@ -7,4 +7,4 @@ Content-Type: application/json
 }
 
 ### redirect
-GET http://localhost:3000/IrIQ7D
+GET http://localhost:9876/aaa

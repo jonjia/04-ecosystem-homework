@@ -314,7 +314,9 @@ dependencies = [
  "nanoid",
  "serde",
  "sqlx",
+ "thiserror",
  "tokio",
+ "tower",
  "tracing",
  "tracing-subscriber",
 ]
